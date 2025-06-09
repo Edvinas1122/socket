@@ -10,12 +10,16 @@ const SystemMessage = z.object({
 });
 
 const ChatMessage = z.object({
-  type: z.literal('chat'),
-  content: z.object({
-    user: z.string(),
-    message: z.string(),
-    timestamp: z.number(),
-  }),
+	type: z.literal('chat'),
+	content: z.object({
+		message: z.object({
+			content: z.string(),
+			member: z.string(),
+			sent: z.string(),
+			id: z.string(),
+			chat: z.string()
+		})
+	}),
 });
 
 const EventMessage = z.object({

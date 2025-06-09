@@ -1,10 +1,13 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { MessageSchema } from "./schema";
 import { AuthHBWebSocket } from "./websocket";
+import {z} from 'zod'
 
-export class WebSocketHibernationServer extends AuthHBWebSocket(MessageSchema) {
+type AcceptedMessage = z.infer<typeof MessageSchema>;
+
+export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 	
-	webSocketMessage = this.withMessage(
+	webSocketMessage = this.onMessage(
 		async ({data, tags, send}) => {
 			if (data.type === 'system') {
 				send({
@@ -18,43 +21,33 @@ export class WebSocketHibernationServer extends AuthHBWebSocket(MessageSchema) {
 		}
 	)
 
-	async subscribe(email: string, event: string) {
-		await this.updateSubscribers(event, (list) =>
-			list.includes(email) ? list : [...list, email]
-		);
-	}
-
-	async unsubscribe(email: string, event: string) {
-		await this.updateSubscribers(event, (list) =>
-			list.filter((e) => e !== email)
-		);
-	}
-
-	async notify(event: string, data: any, except: string[] = []) {
-		const consumers: string[] = await this.ctx.storage.get(event) || [];
-		const sockets = consumers
-			.filter((email) => !except.includes(email))
-			.map((email) => this.ctx.getWebSockets(email)[0]);
-		sockets.forEach((ws) => ws.send(data));
-	}
-
-	private async updateSubscribers(
-		event: string, updater: (current: string[]) => string[]
-	) {
-		const consumers: string[] = await this.ctx.storage.get(event) || [];
-		const updated = updater(consumers);
-		await this.ctx.storage.put(event, updated);
+	send(users: string[], message: AcceptedMessage) {
+		const sockets = users.map((tag) => {
+			const socket = this.ctx.getWebSockets(tag);
+			return socket;
+		}).flat()
+		const _message = JSON.stringify(message)
+		sockets.forEach((socket) => socket.send(_message))
 	}
 };
 
 export interface Env {
-	WEBSOCKET: DurableObjectNamespace<WebSocketHibernationServer>;
+	WEBSOCKET: DurableObjectNamespace<WEBSOCKET>;
 }
 
 export class WebScoketGate extends WorkerEntrypoint<Env> {
-	async token(email: string) {
+
+	private socket = () => {
 		const id = this.env.WEBSOCKET.idFromName('foo');
-		return this.env.WEBSOCKET.get(id).provide_token(email);
+		return this.env.WEBSOCKET.get(id)
+	}
+
+	async token(email: string) {
+		return this.socket().provide_token(email);
+	}
+
+	send(users: string[], message: AcceptedMessage) {
+		this.socket().send(users, message);
 	}
 }
 
@@ -90,6 +83,17 @@ app.get('/websocket', requireUpgrade, async (c) => {
 	return stub.fetch(request)
 });
 
+app.get('/test', async (c) => {
+	const env = c.env
+	
+	const id = env.WEBSOCKET.idFromName('foo')
+	const stub = env.WEBSOCKET.get(id)
+
+	stub.send(['edvinasmomkus@gmail.com'], {type: 'system', content: {
+		info: 'trigger from another endpoint'
+	}})
+	return new Response('event triggered'); 
+})
 
 app.notFound((c) => c.json({ message: 'Not Found', ok: false }, 404));
 

@@ -9,6 +9,8 @@
 	"compatibility_date": "2025-06-01",
 	"migrations": [
 		{
+			// "new_classes": [
+			// ],
 			"new_sqlite_classes": [
 				"WEBSOCKET"
 			],
@@ -18,10 +20,11 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "WebSocketHibernationServer",
+				"class_name": "WEBSOCKET",
 				"name": "WEBSOCKET"
 			}
-		]
+		]			// "new_sqlite_classes": [
+			// ],
 	},
 	"observability": {
 		"enabled": true

@@ -18,7 +18,7 @@ export function WebSocketHBServer<T extends ZodTypeAny>(
 
 	return class WebSocketHibernationServer extends DurableObject {
 
-		protected withMessage: WithMessageType<Parsed> = (handler) => {
+		protected onMessage: WithMessageType<Parsed> = (handler) => {
 			return async (ws: WebSocket, message: ArrayBuffer | string) => {
 				console.log('received a message', message)
 				const send = (msg: Parsed) => ws.send(JSON.stringify(msg));
@@ -96,6 +96,7 @@ export function AuthHBWebSocket<T extends ZodTypeAny>(
 				const token = new URL(request.url).searchParams.get('token');
 				if (!token) throw new Error('must query contain token');
 				const email = await this.validate(token);
+				// const email = 'test'
 				return [email];
 			})
 		
