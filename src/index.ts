@@ -3,7 +3,7 @@ import { MessageSchema } from "./schema";
 import { AuthHBWebSocket } from "./websocket";
 import {z} from 'zod'
 
-type AcceptedMessage = z.infer<typeof MessageSchema>;
+export type AcceptedMessage = z.infer<typeof MessageSchema>;
 
 export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 	
@@ -16,12 +16,13 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 						info: data.content.info,
 						user: tags[0]
 					}
-				});
+				}); 
 			}
 		}
 	)
 
 	send(users: string[], message: AcceptedMessage) {
+		console.log('distribute', users, message);
 		const sockets = users.map((tag) => {
 			const socket = this.ctx.getWebSockets(tag);
 			return socket;
@@ -51,8 +52,11 @@ export class WebScoketGate extends WorkerEntrypoint<Env> {
 	}
 }
 
+export type WebSocketGateService = InstanceType<typeof WebScoketGate>;
+
 
 import { Hono, MiddlewareHandler } from 'hono'
+import { InstanceOf } from "ts-morph";
 
 const app = new Hono<{Bindings: Env}>();
 
@@ -84,13 +88,22 @@ app.get('/websocket', requireUpgrade, async (c) => {
 });
 
 app.get('/test', async (c) => {
-	const env = c.env
+	const env = c.env;
 	
 	const id = env.WEBSOCKET.idFromName('foo')
 	const stub = env.WEBSOCKET.get(id)
 
-	stub.send(['edvinasmomkus@gmail.com'], {type: 'system', content: {
-		info: 'trigger from another endpoint'
+	const chat_id = c.req.query('chat');
+	const message = c.req.query('message');
+
+	if (!chat_id || !message) return new Response('chat id and message required');
+
+	stub.send(['edvinasmomkus@gmail.com'], {type: 'chat', content: {
+		content: message,
+		id: 'edvinasmomkus@gmail.com:short:1751036551178',
+		chat: chat_id,
+		member: "edvinasmomkus@gmail.com:short:1751036551178",
+		sent: Date.now().toLocaleString()
 	}})
 	return new Response('event triggered'); 
 })

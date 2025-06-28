@@ -38,6 +38,9 @@
 		"skipLibCheck": true,
 		"types": [
 			"./worker-configuration.d.ts"
-		]
+		],
+		// "paths": [
+		// 	"@"
+		// ]
 	}
 }
