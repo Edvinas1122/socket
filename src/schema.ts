@@ -9,16 +9,22 @@ const SystemMessage = z.object({
   }),
 });
 
+const Invite = z.object({
+  type: z.literal('invite'),
+  content: z.object({
+    by: z.string(),
+    chat: z.string()
+  })
+})
+
 const ChatMessage = z.object({
 	type: z.literal('chat'),
 	content: z.object({
-		// message: z.object({
 			content: z.string(),
 			member: z.string(),
 			sent: z.string(),
 			id: z.string(),
 			chat: z.string()
-		// })
 	}),
 });
 
@@ -35,6 +41,7 @@ const MessageSchema = z.discriminatedUnion('type', [
   SystemMessage,
   ChatMessage,
   EventMessage,
+  Invite
 ]);
 
 type Message = z.infer<typeof MessageSchema>;
