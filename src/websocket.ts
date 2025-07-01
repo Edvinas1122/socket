@@ -9,7 +9,7 @@ type MessageHandler<T> = (ctx: {
 	send: (msg: T) => void;
 }) => void | Promise<void>;
 
-type WithMessageType<T> = (handler: MessageHandler<T>) => (ws: WebSocket, message: ArrayBuffer | string) => Promise<void>;
+type WithMessageType<T> = (handler: MessageHandler<T>) => (ws: WebSocket, message: ArrayBuffer | string) => void;
 
 export function WebSocketHBServer<T extends ZodTypeAny>(
 	MessageSchema: T
@@ -46,7 +46,9 @@ export function WebSocketHBServer<T extends ZodTypeAny>(
 			};
 		};
 
-		protected withFetch(handler: (request: Request) => Promise<string[]>): (request: Request) => Promise<Response> {
+		protected withFetch(
+			handler: (request: Request) => Promise<string[]>
+		): (request: Request) => Promise<Response> {
 			return async (request: Request): Promise<Response> => {
 				const webSocketPair = new WebSocketPair();
 				const [client, server] = Object.values(webSocketPair);
@@ -65,13 +67,27 @@ export function WebSocketHBServer<T extends ZodTypeAny>(
 			};
 		}
 
-		async webSocketClose(
-			ws: WebSocket,
-			code: number,
-			reason: string,
-			wasClean: boolean
+		// async webSocketClose(
+		// 	ws: WebSocket,
+		// 	code: number,
+		// 	reason: string,
+		// 	wasClean: boolean
+		// ) {
+		// 	ws.close(code, "Durable Object is closing WebSocket");
+		// }
+
+		protected withSocketClose(
+			handler: (ws: WebSocket,code: number,reason: string,wasClean: boolean) => void
 		) {
-			ws.close(code, "Durable Object is closing WebSocket");
+			return async (
+				ws: WebSocket,
+				code: number,
+				reason: string,
+				wasClean: boolean
+			) => {
+				ws.close();
+				handler(ws, code, reason, wasClean)
+			}
 		}
 	};
 }
@@ -91,14 +107,41 @@ export function AuthHBWebSocket<T extends ZodTypeAny>(
 					await this.ctx.storage.put("rsa_keys", { public_key, private_key });
 				})
 			}
-		
-			fetch = this.withFetch(async (request) => {
-				const token = new URL(request.url).searchParams.get('token');
-				if (!token) throw new Error('must query contain token');
-				const email = await this.validate(token);
-				// const email = 'test'
-				return [email];
-			})
+
+			protected withAuthFetch(
+				handler: (request: Request, email: string) => void
+			): (request: Request) => Promise<Response> {
+				return this.withFetch(async (req) => {
+					const token = new URL(req.url).searchParams.get('token');
+					if (!token) throw new Error('must query contain token');
+					const email = await this.validate(token);
+					handler(req, email);
+					return [email];
+				})
+			}
+
+			protected withDistribute(
+				handler: (users: string[], message: zInfer<T>) => void
+			): (users: string[], message: zInfer<T>) => void
+			{
+				return (users, message) => {
+					console.log('distribute', users, message);
+					const sockets = users.map((tag) => this.ctx.getWebSockets(tag))
+						.flat()
+					const _message = JSON.stringify(message)
+					sockets.forEach((socket) => socket.send(_message))
+					handler(users, message);
+				}
+			}
+
+			protected withAuthClose(
+				handler: (email: string, s: {ws: WebSocket, code: number, reason: string, wasClean: boolean}) => void
+			): (ws: WebSocket, code: number, reason: string, wasClean: boolean) => Promise<void> {
+				return this.withSocketClose((ws, code, reason, wasClean) => {
+					const email = this.ctx.getTags(ws)[0];
+					handler(email, {ws, code, reason, wasClean})
+				})
+			}
 		
 			async provide_token(email: string) {
 				const keys = await this.ctx.storage.get('rsa_keys') as {public_key: JsonWebKey; private_key: JsonWebKey;};

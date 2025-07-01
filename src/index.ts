@@ -2,13 +2,29 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { MessageSchema } from "./schema";
 import { AuthHBWebSocket } from "./websocket";
 import {z} from 'zod'
+import * as queries from "./sql"
 
 export type AcceptedMessage = z.infer<typeof MessageSchema>;
 
+
+export interface Env {
+	MY_DURABLE_OBJECT: DurableObjectNamespace;
+}
+
 export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
-	
+	private sql: SqlStorage;
+	constructor(ctx: DurableObjectState, env: Env) {
+			super(ctx, env);
+			this.sql = ctx.storage.sql;
+			this.sql.exec(queries.CREATE_LOGS_TABLE_SQL)
+	}
+
+	fetch = this.withAuthFetch((req, email) => {
+		this.sql.exec(queries.UPSERT_LOG_SQL, email, Date.now(), 1);	
+	});
+
 	webSocketMessage = this.onMessage(
-		async ({data, tags, send}) => {
+		({data, tags, send}) => {
 			if (data.type === 'system') {
 				send({
 					type: 'system',
@@ -21,15 +37,19 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 		}
 	)
 
-	send(users: string[], message: AcceptedMessage) {
-		console.log('distribute', users, message);
-		const sockets = users.map((tag) => {
-			const socket = this.ctx.getWebSockets(tag);
-			return socket;
-		}).flat()
-		const _message = JSON.stringify(message)
-		sockets.forEach((socket) => socket.send(_message))
+	webSocketClose = this.withAuthClose((email) => {
+		this.sql.exec(queries.SET_OFFLINE_SQL, email);
+	})
+
+	async logs() {
+		const data = await this.sql.exec(queries.SELECT_ALL_LOGS)	
+			.toArray()
+		console.log('fetch',data);
+		return data;
 	}
+	send = this.withDistribute(() => {
+
+	});
 };
 
 export interface Env {
@@ -50,12 +70,16 @@ export class WebScoketGate extends WorkerEntrypoint<Env> {
 	send(users: string[], message: AcceptedMessage) {
 		this.socket().send(users, message);
 	}
+
+	async logs() {
+		return await this.socket().logs()
+	}
 }
 
 export type WebSocketGateService = InstanceType<typeof WebScoketGate>;
 
 
-import { Hono, MiddlewareHandler } from 'hono'
+import { Hono, MiddlewareHandler, Handler, Context } from 'hono'
 import { InstanceOf } from "ts-morph";
 
 const app = new Hono<{Bindings: Env}>();
@@ -69,12 +93,34 @@ app.get('/', (c) => c.json({
 	}
 }));
 
+
 const requireUpgrade: MiddlewareHandler = async function (c, next) {
 	const upgradeHeader = c.req.header('Upgrade')
 	if (!upgradeHeader || upgradeHeader !== 'websocket') {
 		return c.text('expected Upgrade: websocket', 426);
 	}
 	return next();
+}
+
+const wihError: MiddlewareHandler = async function (c, next) {
+	try {
+		return next();
+	} catch (e: any) {
+		console.error("error:", e.message);
+		return new Response('Error: ' + e.message);
+	}
+}
+
+function withSocket(
+	handler: (socket: InstanceType<typeof WEBSOCKET>, c: Context) => Promise<Response>
+): Handler {
+	return async (c) => {
+		const env = c.env;
+	
+		const id = env.WEBSOCKET.idFromName('foo');
+		const stub = env.WEBSOCKET.get(id) as InstanceType<typeof WEBSOCKET>;
+		return await handler(stub, c);
+	}
 }
 
 app.get('/websocket', requireUpgrade, async (c) => {
@@ -86,6 +132,11 @@ app.get('/websocket', requireUpgrade, async (c) => {
 
 	return stub.fetch(request)
 });
+
+app.get('/logs', wihError, withSocket(async (socket, c) => {
+	const data = await socket.logs();
+	return new Response(JSON.stringify(data));
+}))
 
 app.get('/test', async (c) => {
 	const env = c.env;
