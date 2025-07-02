@@ -67,14 +67,9 @@ export function WebSocketHBServer<T extends ZodTypeAny>(
 			};
 		}
 
-		// async webSocketClose(
-		// 	ws: WebSocket,
-		// 	code: number,
-		// 	reason: string,
-		// 	wasClean: boolean
-		// ) {
-		// 	ws.close(code, "Durable Object is closing WebSocket");
-		// }
+		public online(): number {
+			return this.ctx.getWebSockets().length;
+		}
 
 		protected withSocketClose(
 			handler: (ws: WebSocket,code: number,reason: string,wasClean: boolean) => void

@@ -41,15 +41,17 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 		this.sql.exec(queries.SET_OFFLINE_SQL, email);
 	})
 
+	send = this.withDistribute(() => {
+
+	});
+
 	async logs() {
 		const data = await this.sql.exec(queries.SELECT_ALL_LOGS)	
 			.toArray()
 		console.log('fetch',data);
 		return data;
 	}
-	send = this.withDistribute(() => {
 
-	});
 };
 
 export interface Env {
@@ -73,6 +75,10 @@ export class WebScoketGate extends WorkerEntrypoint<Env> {
 
 	async logs() {
 		return await this.socket().logs()
+	}
+
+	online() {
+		return this.socket().online()
 	}
 }
 
