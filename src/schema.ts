@@ -13,7 +13,8 @@ const Invite = z.object({
   type: z.literal('invite'),
   content: z.object({
     by: z.string(),
-    chat: z.string()
+    chat: z.any(),
+    ch_member: z.any()
   })
 })
 

@@ -41,14 +41,18 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 		this.sql.exec(queries.SET_OFFLINE_SQL, email);
 	})
 
-	send = this.withDistribute(() => {
+	async distribute(e: string[], m: AcceptedMessage) {
+		console.log('socket rpc called', e)
+		const handler = this.withDistribute((e, m) => {
+			console.log('distributing a message to:', e);
+		});
+		handler(e, m);
+	}
 
-	});
 
 	async logs() {
 		const data = await this.sql.exec(queries.SELECT_ALL_LOGS)	
 			.toArray()
-		console.log('fetch',data);
 		return data;
 	}
 
@@ -69,8 +73,10 @@ export class WebScoketGate extends WorkerEntrypoint<Env> {
 		return this.socket().provide_token(email);
 	}
 
-	send(users: string[], message: AcceptedMessage) {
-		this.socket().send(users, message);
+	async send(users: string[], message: AcceptedMessage) {
+		console.log('rpc send called');
+		const prom = this.socket().distribute(users, message);
+		this.ctx.waitUntil(prom);
 	}
 
 	async logs() {
@@ -155,7 +161,7 @@ app.get('/test', async (c) => {
 
 	if (!chat_id || !message) return new Response('chat id and message required');
 
-	stub.send(['edvinasmomkus@gmail.com'], {type: 'chat', content: {
+	stub.distribute(['edvinasmomkus@gmail.com'], {type: 'chat', content: {
 		content: message,
 		id: 'edvinasmomkus@gmail.com:short:1751036551178',
 		chat: chat_id,

@@ -120,7 +120,7 @@ export function AuthHBWebSocket<T extends ZodTypeAny>(
 			): (users: string[], message: zInfer<T>) => void
 			{
 				return (users, message) => {
-					console.log('distribute', users, message);
+					console.log('distribute called', users);
 					const sockets = users.map((tag) => this.ctx.getWebSockets(tag))
 						.flat()
 					const _message = JSON.stringify(message)
