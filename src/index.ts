@@ -20,7 +20,7 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 	}
 
 	fetch = this.withAuthFetch((req, email) => {
-		this.sql.exec(queries.UPSERT_LOG_SQL, email, Date.now(), 1);	
+		this.sql.exec(queries.UPSERT_LOG_SQL, email, Date.now(), 1);
 	});
 
 	webSocketMessage = this.onMessage(
@@ -43,10 +43,13 @@ export class WEBSOCKET extends AuthHBWebSocket(MessageSchema) {
 
 	async distribute(e: string[], m: AcceptedMessage) {
 		console.log('socket rpc called', e)
-		const handler = this.withDistribute((e, m) => {
-			console.log('distributing a message to:', e);
+		const distributedTo: string[] = [];
+		const handler = this.withDistribute((dis, m) => {
+			distributedTo.push(...dis);
+			console.log('distributed online to:', dis);
 		});
 		handler(e, m);
+		return distributedTo;
 	}
 
 
@@ -75,8 +78,10 @@ export class WebScoketGate extends WorkerEntrypoint<Env> {
 
 	async send(users: string[], message: AcceptedMessage) {
 		console.log('rpc send called');
-		const prom = this.socket().distribute(users, message);
-		this.ctx.waitUntil(prom);
+		const socket = this.socket();
+		const prom = socket.distribute(users, message);
+		// this.ctx.waitUntil(prom);
+		return await prom;
 	}
 
 	async logs() {

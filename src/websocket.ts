@@ -103,6 +103,7 @@ export function AuthHBWebSocket<T extends ZodTypeAny>(
 				})
 			}
 
+
 			protected withAuthFetch(
 				handler: (request: Request, email: string) => void
 			): (request: Request) => Promise<Response> {
@@ -116,16 +117,22 @@ export function AuthHBWebSocket<T extends ZodTypeAny>(
 			}
 
 			protected withDistribute(
-				handler: (users: string[], message: zInfer<T>) => void
+				handler: (wasOnline: string[], message: zInfer<T>) => void
 			): (users: string[], message: zInfer<T>) => void
 			{
 				return (users, message) => {
-					console.log('distribute called', users);
-					const sockets = users.map((tag) => this.ctx.getWebSockets(tag))
-						.flat()
+					const wasOnline: string[] = [];
+
+					const handleDisReq = (tag: string) => {
+						const socks = this.ctx.getWebSockets(tag);
+						if (socks.length) {wasOnline.push(tag)}
+						return socks;
+					}
+
+					const sockets = users.map(handleDisReq).flat();
 					const _message = JSON.stringify(message)
-					sockets.forEach((socket) => socket.send(_message))
-					handler(users, message);
+					sockets.forEach((socket) => socket.send(_message));
+					handler(wasOnline, message);
 				}
 			}
 
